@@ -8,6 +8,8 @@ from typing import Tuple
 from typing import Union
 from xml.sax.handler import ContentHandler
 
+from clarin.sru.xml.writer import XMLStreamWriterHelper
+
 from clarin.sru.fcs.constants import FCS_NS
 from clarin.sru.fcs.constants import FCS_PREFIX
 from clarin.sru.fcs.constants import FCSDataViewNamespaces
@@ -165,30 +167,25 @@ class FCSRecordXMLStreamWriter:
         if keyword is None:
             raise TypeError("keyword is None")
 
+        writer = XMLStreamWriterHelper(writer)
         ns = FCSDataViewNamespaces.KWIC
 
         FCSRecordXMLStreamWriter.startDataView(writer, ns.mimetype)
 
         # actual "kwic" data view
-        writer.startPrefixMapping(ns.prefix, ns.namespace)
-        writer.startElementNS((ns.namespace, "kwic"), None, dict())
+        with writer.prefix(ns.prefix, ns.namespace), writer.element(
+            "kwic", ns.namespace
+        ):
+            with writer.element("c", ns.namespace, attrs={"type": "left"}):
+                if left:
+                    writer.characters(left)
 
-        writer.startElementNS((ns.namespace, "c"), None, {(None, "type"): "left"})
-        if left:
-            writer.characters(left)
-        writer.endElementNS((ns.namespace, "c"), None)
+            with writer.element("kw", ns.namespace):
+                writer.characters(keyword)
 
-        writer.startElementNS((ns.namespace, "kw"), None, dict())
-        writer.characters(keyword)
-        writer.endElementNS((ns.namespace, "kw"), None)
-
-        writer.startElementNS((ns.namespace, "c"), None, {(None, "type"): "right"})
-        if right:
-            writer.characters(right)
-        writer.endElementNS((ns.namespace, "c"), None)
-
-        writer.endElementNS((ns.namespace, "kwic"), None)
-        writer.endPrefixMapping(ns.prefix)
+            with writer.element("c", ns.namespace, {"type": "right"}):
+                if right:
+                    writer.characters(right)
 
         FCSRecordXMLStreamWriter.endDataView(writer)
 
@@ -213,26 +210,21 @@ class FCSRecordXMLStreamWriter:
         if hit is None:
             raise TypeError("hit is None")
 
+        writer = XMLStreamWriterHelper(writer)
         ns = FCSDataViewNamespaces.HITS
 
         FCSRecordXMLStreamWriter.startDataView(writer, ns.mimetype)
 
         # actual "hits" data view
-        writer.startPrefixMapping(ns.prefix, ns.namespace)
-        writer.startElementNS((ns.namespace, "Result"), None, dict())
-
-        if left and not left.isspace():
-            writer.characters(left)
-
-        writer.startElementNS((ns.namespace, "Hit"), None, dict())
-        writer.characters(hit)
-        writer.endElementNS((ns.namespace, "Hit"), None)
-
-        if right and not right.isspace():
-            writer.characters(right)
-
-        writer.endElementNS((ns.namespace, "Result"), None)
-        writer.endPrefixMapping(ns.prefix)
+        with writer.prefix(ns.prefix, ns.namespace), writer.element(
+            "Result", ns.namespace
+        ):
+            if left and not left.isspace():
+                writer.characters(left)
+            with writer.element("Hit", ns.namespace):
+                writer.characters(hit)
+            if right and not right.isspace():
+                writer.characters(right)
 
         FCSRecordXMLStreamWriter.endDataView(writer)
 
@@ -262,40 +254,36 @@ class FCSRecordXMLStreamWriter:
         if not hits or not all(isinstance(e, tuple) and len(e) == 2 for e in hits):
             raise ValueError("hits is empty or not all elements are 2-tuples")
 
+        writer = XMLStreamWriterHelper(writer)
         ns = FCSDataViewNamespaces.HITS
 
         FCSRecordXMLStreamWriter.startDataView(writer, ns.mimetype)
 
         # actual "hits" data view
-        writer.startPrefixMapping(ns.prefix, ns.namespace)
-        writer.startElementNS((ns.namespace, "Result"), None, dict())
+        with writer.prefix(ns.prefix, ns.namespace), writer.element(
+            "Result", ns.namespace
+        ):
+            pos = 0
+            for start, end in hits:
+                if start < 0 or start > len(text):
+                    raise ValueError(f"start index out of bounds: {start=}")
+                if second_is_length:
+                    if end < 1:
+                        raise ValueError(f"length must be larger than 0: length={end}")
+                    end += start
+                if start >= end:
+                    raise ValueError(
+                        f"end offset must be larger then start offset: {start=}, {end=}"
+                    )
 
-        pos = 0
-        for start, end in hits:
-            if start < 0 or start > len(text):
-                raise ValueError(f"start index out of bounds: {start=}")
-            if second_is_length:
-                if end < 1:
-                    raise ValueError(f"length must be larger than 0: length={end}")
-                end += start
-            if start >= end:
-                raise ValueError(
-                    f"end offset must be larger then start offset: {start=}, {end=}"
-                )
+                if start > pos:
+                    writer.characters(text[pos:start])
 
-            if start > pos:
-                writer.characters(text[pos:start])
+                writer.elementcontent("Hit", text[start:end], ns.namespace)
+                pos = end
 
-            writer.startElementNS((ns.namespace, "Hit"), None, dict())
-            writer.characters(text[start:end])
-            writer.endElementNS((ns.namespace, "Hit"), None)
-            pos = end
-
-        if pos < len(text) - 1:
-            writer.characters(text[pos:])
-
-        writer.endElementNS((ns.namespace, "Result"), None)
-        writer.endPrefixMapping(ns.prefix)
+            if pos < len(text) - 1:
+                writer.characters(text[pos:])
 
         FCSRecordXMLStreamWriter.endDataView(writer)
 
@@ -609,49 +597,42 @@ class AdvancedDataViewWriter:
         if writer is None:
             raise TypeError("writer is None")
 
+        writer = XMLStreamWriterHelper(writer)
         ns = FCSDataViewNamespaces.ADV
+
         FCSRecordXMLStreamWriter.startDataView(writer, ns.mimetype)
-        writer.startPrefixMapping(ns.prefix, ns.namespace)
-        writer.startElementNS(
-            (ns.namespace, "Advanced"), None, attrs={(None, "unit"): self.unit.value}
-        )
 
-        # segments
-        writer.startElementNS((ns.namespace, "Segments"), None, attrs=dict())
-        for segment in self.segments:
-            # FIXME: unit translation (long -> time)
-            attrs = {
-                (None, "id"): segment.id,
-                (None, "start"): str(segment.start),
-                (None, "end"): str(segment.end),
-            }
-            if segment.ref:
-                attrs[(None, "ref")] = segment.ref
-            writer.startElementNS((ns.namespace, "Segment"), None, attrs=attrs)
-            writer.endElementNS((ns.namespace, "Segment"), None)
-        writer.endElementNS((ns.namespace, "Segments"), None)
+        with writer.prefix(ns.prefix, ns.namespace), writer.element(
+            "Advanced", ns.namespace, attrs={"unit": self.unit.value}
+        ):
+            # segments
+            with writer.element("Segments", ns.namespace):
+                for segment in self.segments:
+                    # FIXME: unit translation (long -> time)
+                    attrs = {
+                        "id": segment.id,
+                        "start": str(segment.start),
+                        "end": str(segment.end),
+                    }
+                    if segment.ref:
+                        attrs["ref"] = segment.ref
+                    writer.startElementNS((ns.namespace, "Segment"), attrs=attrs)
+                    writer.endElementNS((ns.namespace, "Segment"))
 
-        # layers
-        writer.startElementNS((ns.namespace, "Layers"), None, attrs=dict())
-        for layer_id, layer in self.layers.items():
-            writer.startElementNS(
-                (ns.namespace, "Layer"), None, attrs={(None, "id"): layer_id}
-            )
-            for span in layer:
-                attrs = {(None, "ref"): span.segment.id}
-                if span.highlight is not None:
-                    attrs[(None, "highlight")] = span.highlight
-                if span.altValue is not None:
-                    attrs[(None, "alt-value")] = span.altValue
-                writer.startElementNS((ns.namespace, "Span"), None, attrs=attrs)
-                if span.value and not span.value.isspace():
-                    writer.characters(span.value)
-                writer.endElementNS((ns.namespace, "Span"), None)
-            writer.endElementNS((ns.namespace, "Layer"), None)
-        writer.endElementNS((ns.namespace, "Layers"), None)
+            # layers
+            with writer.element("Layers", ns.namespace):
+                for layer_id, layer in self.layers.items():
+                    with writer.element("Layer", ns.namespace, attrs={"id": layer_id}):
+                        for span in layer:
+                            attrs = {"ref": span.segment.id}
+                            if span.highlight is not None:
+                                attrs["highlight"] = span.highlight
+                            if span.altValue is not None:
+                                attrs["alt-value"] = span.altValue
+                            with writer.element("Span", ns.namespace, attrs=attrs):
+                                if span.value and not span.value.isspace():
+                                    writer.characters(span.value)
 
-        writer.endElementNS((ns.namespace, "Advanced"), None)
-        writer.endPrefixMapping(ns.prefix)
         FCSRecordXMLStreamWriter.endDataView(writer)
 
     def writeHitsDataView(self, writer: ContentHandler, layer_id: str):
@@ -670,29 +651,29 @@ class AdvancedDataViewWriter:
         if not spans:
             raise KeyError(f"layer with id '{layer_id}' does not exist")
 
+        writer = XMLStreamWriterHelper(writer)
         ns = FCSDataViewNamespaces.HITS
+
         FCSRecordXMLStreamWriter.startDataView(writer, ns.mimetype)
-        writer.startPrefixMapping(ns.prefix, ns.namespace)
-        writer.startElementNS((ns.namespace, "Result"), None, attrs=dict())
 
-        need_space = False
-        for span in spans:
-            if need_space:
-                writer.characters(" ")
-                need_space = False
+        with writer.prefix(ns.prefix, ns.namespace), writer.element(
+            "Result", ns.namespace
+        ):
+            need_space = False
+            for span in spans:
+                if need_space:
+                    writer.characters(" ")
+                    need_space = False
 
-            if span.highlight:
-                writer.startElementNS((ns.namespace, "Hit"), None, attrs=dict())
-                writer.characters(span.value)
-                writer.endElementNS((ns.namespace, "Hit"), None)
-                need_space = True
-            else:
-                writer.characters(span.value)
-                if span.value and not span.value[-1].isspace():
+                if span.highlight:
+                    with writer.element("Hit", ns.namespace):
+                        writer.characters(span.value)
                     need_space = True
+                else:
+                    writer.characters(span.value)
+                    if span.value and not span.value[-1].isspace():
+                        need_space = True
 
-        writer.endElementNS((ns.namespace, "Result"), None)
-        writer.endPrefixMapping(ns.prefix)
         FCSRecordXMLStreamWriter.endDataView(writer)
 
 

@@ -26,6 +26,7 @@ from clarin.sru.server.result import SRUExplainResult
 from clarin.sru.server.result import SRUScanResultSet
 from clarin.sru.server.server import SRUSearchEngine
 from clarin.sru.xml.writer import SRUXMLStreamWriter
+from clarin.sru.xml.writer import XMLStreamWriterHelper
 
 from clarin.sru.fcs.constants import ED_NS
 from clarin.sru.fcs.constants import ED_PREFIX
@@ -804,66 +805,56 @@ class SimpleEndpointSearchEngineBase(
 
     @staticmethod
     def _write_EndpointDescription(writer: ContentHandler, epdesc: EndpointDescription):
+        writer = XMLStreamWriterHelper(writer)
+
         writer.startPrefixMapping(ED_PREFIX, ED_NS)
         writer.startElementNS(
             (ED_NS, "EndpointDescription"),
-            None,
-            attrs={(None, "version"): str(epdesc.get_version())},
+            attrs={"version": str(epdesc.get_version())},
         )
 
         # Capabilities
-        writer.startElementNS((ED_NS, "Capabilities"), None, attrs=dict())
-        for capability in epdesc.get_capabilities():
-            writer.startElementNS((ED_NS, "Capability"), None, attrs=dict())
-            writer.characters(capability)
-            writer.endElementNS((ED_NS, "Capability"), None)
-        writer.endElementNS((ED_NS, "Capabilities"), None)
+        with writer.element("Capabilities", ED_NS):
+            for capability in epdesc.get_capabilities():
+                with writer.element("Capability", ED_NS):
+                    writer.characters(capability)
 
         # SupportedDataViews
-        writer.startElementNS((ED_NS, "SupportedDataViews"), None, attrs=dict())
-        for dataview in epdesc.get_supported_DataViews():
-            if (
-                not dataview.deliveryPolicy
-                or dataview.deliveryPolicy not in DataView.DeliveryPolicy
-            ):
-                raise SAXException(
-                    f"invalid value for payload delivery policy: {dataview.deliveryPolicy}"
-                )
-            writer.startElementNS(
-                (ED_NS, "SupportedDataView"),
-                None,
-                attrs={
-                    (None, "id"): dataview.identifier,
-                    (None, "delivery-policy"): dataview.deliveryPolicy.value,
-                },
-            )
-            writer.characters(dataview.mimetype)
-            writer.endElementNS((ED_NS, "SupportedDataView"), None)
-        writer.endElementNS((ED_NS, "SupportedDataViews"), None)
+        with writer.element("SupportedDataViews", ED_NS):
+            for dataview in epdesc.get_supported_DataViews():
+                if (
+                    not dataview.deliveryPolicy
+                    or dataview.deliveryPolicy not in DataView.DeliveryPolicy
+                ):
+                    raise SAXException(
+                        f"invalid value for payload delivery policy: {dataview.deliveryPolicy}"
+                    )
+                with writer.element(
+                    "SupportedDataView",
+                    ED_NS,
+                    attrs={
+                        "id": dataview.identifier,
+                        "delivery-policy": dataview.deliveryPolicy.value,
+                    },
+                ):
+                    writer.characters(dataview.mimetype)
 
         # SupportedLayers (FCS 2.0)
         if epdesc.is_version(EndpointDescription.VERSION_2):
             if epdesc.get_supported_Layers():
-                writer.startElementNS((ED_NS, "SupportedLayers"), None, attrs=dict())
-                for layer in epdesc.get_supported_Layers():
-                    attrs = {
-                        (None, "id"): layer.id,
-                        (None, "result-id"): layer.result_id,
-                    }
-                    if layer.encoding == Layer.ContentEncoding.EMPTY:
-                        attrs[(None, "type")] = "empty"
-                    if layer.qualifier:
-                        attrs[(None, "qualifier")] = layer.qualifier
-                    if layer.alt_ValueInfo:
-                        attrs[(None, "alt-value-info")] = layer.alt_ValueInfo
-                        if layer.alt_ValueInfo_url:
-                            attrs[
-                                (None, "alt-value-info-uri")
-                            ] = layer.alt_ValueInfo_url
-                    writer.startElementNS((ED_NS, "SupportedLayer"), None, attrs=attrs)
-                    writer.characters(layer.type)
-                    writer.endElementNS((ED_NS, "SupportedLayer"), None)
-                writer.endElementNS((ED_NS, "SupportedLayers"), None)
+                with writer.element("SupportedLayers", ED_NS):
+                    for layer in epdesc.get_supported_Layers():
+                        attrs = {"id": layer.id, "result-id": layer.result_id}
+                        if layer.encoding == Layer.ContentEncoding.EMPTY:
+                            attrs["type"] = "empty"
+                        if layer.qualifier:
+                            attrs["qualifier"] = layer.qualifier
+                        if layer.alt_ValueInfo:
+                            attrs["alt-value-info"] = layer.alt_ValueInfo
+                            if layer.alt_ValueInfo_url:
+                                attrs["alt-value-info-uri"] = layer.alt_ValueInfo_url
+                        with writer.element("SupportedLayer", ED_NS, attrs=attrs):
+                            writer.characters(layer.type)
 
         # Resources
         try:
@@ -889,60 +880,49 @@ class SimpleEndpointSearchEngineBase(
         if not resources:
             return
 
+        writer = XMLStreamWriterHelper(writer)
+
         # TODO: XML NS required or auto included/known?
         writer.startPrefixMapping(XML_NS_PREFIX, XML_NS_URI)
-        writer.startElementNS((ED_NS, "Resources"), None, attrs=dict())
+        writer.startElementNS((ED_NS, "Resources"))
 
         for resource in resources:
-            writer.startElementNS(
-                (ED_NS, "Resource"), None, attrs={(None, "pid"): resource.pid}
-            )
+            writer.startElementNS((ED_NS, "Resource"), attrs={"pid": resource.pid})
 
             # title
             for lang, title in resource.title.items():
-                writer.startElementNS(
-                    (ED_NS, "Title"), None, attrs={(XML_NS_URI, "lang"): lang}
-                )
-                writer.characters(title)
-                writer.endElementNS((ED_NS, "Title"), None)
+                with writer.element("Title", ED_NS, attrs={(XML_NS_URI, "lang"): lang}):
+                    writer.characters(title)
 
             # description
             if resource.description:
                 for lang, desc in resource.description.items():
-                    writer.startElementNS(
-                        (ED_NS, "Description"), None, attrs={(XML_NS_URI, "lang"): lang}
-                    )
-                    writer.characters(desc)
-                    writer.endElementNS((ED_NS, "Description"), None)
+                    with writer.element(
+                        "Description", ED_NS, attrs={(XML_NS_URI, "lang"): lang}
+                    ):
+                        writer.characters(desc)
 
             # landing page
             if resource.landing_page_uri:
-                writer.startElementNS((ED_NS, "LandingPageURI"), None, attrs=dict())
-                writer.characters(resource.landing_page_uri)
-                writer.endElementNS((ED_NS, "LandingPageURI"), None)
+                with writer.element("LandingPageURI", ED_NS):
+                    writer.characters(resource.landing_page_uri)
 
             # languages
-            writer.startElementNS((ED_NS, "Languages"), None, attrs=dict())
-            for language in resource.languages:
-                writer.startElementNS((ED_NS, "Language"), None, attrs=dict())
-                writer.characters(language)
-                writer.endElementNS((ED_NS, "Language"), None)
-            writer.endElementNS((ED_NS, "Languages"), None)
+            with writer.element("Languages", ED_NS):
+                for language in resource.languages:
+                    with writer.element("Language", ED_NS):
+                        writer.characters(language)
 
             # available data views
             dvref = " ".join(dv.identifier for dv in resource.available_DataViews)
-            writer.startElementNS(
-                (ED_NS, "AvailableDataViews"), None, attrs={(None, "ref"): dvref}
-            )
-            writer.endElementNS((ED_NS, "AvailableDataViews"), None)
+            writer.startElementNS((ED_NS, "AvailableDataViews"), attrs={"ref": dvref})
+            writer.endElementNS((ED_NS, "AvailableDataViews"))
 
             # available layer (FCS 2.0)
             if write_layers and resource.available_Layers:
                 lref = " ".join(ly.id for ly in resource.available_Layers)
-                writer.startElementNS(
-                    (ED_NS, "AvailableLayers"), None, attrs={(None, "ref"): lref}
-                )
-                writer.endElementNS((ED_NS, "AvailableLayers"), None)
+                writer.startElementNS((ED_NS, "AvailableLayers"), attrs={"ref": lref})
+                writer.endElementNS((ED_NS, "AvailableLayers"))
 
             # child resources
             subs = resource.sub_Resources

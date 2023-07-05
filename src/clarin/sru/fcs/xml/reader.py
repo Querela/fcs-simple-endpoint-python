@@ -537,7 +537,6 @@ class SimpleEndpointDescriptionParser:
                             " defined in <SupportedDataViews>"
                         )
                 if not availDataViews:
-                    # NOTE: typo in java impl
                     raise SRUConfigException(
                         f"No available data views were defined for resource"
                         f" with PID '{pid}'"
@@ -570,7 +569,6 @@ class SimpleEndpointDescriptionParser:
                             )
                 else:
                     if has_ADV_view:
-                        # NOTE: typo in java impl
                         LOGGER.debug("No <SupportedLayers> for resource '%s'", pid)
 
                 rnodes = node.xpath(
