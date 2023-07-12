@@ -58,5 +58,5 @@ intersphinx_mapping = {
     "fcs-ql-parser": ("https://fcs-ql-python.readthedocs.io/en/latest/", None),
     "werkzeug": ("https://werkzeug.palletsprojects.com/en/2.2.x/", None),  # latest?
     "PyJWT": ("https://pyjwt.readthedocs.io/en/stable/", None),
-    "cryptography": ("https://cryptography.io/en/latest/", None)
+    "cryptography": ("https://cryptography.io/en/latest/", None),
 }

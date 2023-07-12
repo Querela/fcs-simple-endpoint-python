@@ -7,6 +7,7 @@ FCS Simple Endpoint
 [![](https://img.shields.io/badge/linting-flake8-yellowgreen)](https://github.com/PyCQA/flake8)  
 [![](https://img.shields.io/badge/%20doc%20style-sphinx-0a507a.svg)](https://www.sphinx-doc.org/en/master/usage/index.html)
 [![](https://img.shields.io/badge/%20doc%20style-google-3666d6.svg)](https://google.github.io/styleguide/pyguide.html#s3.8-comments-and-docstrings)  
+[![fcs-simple-endpoint @ PyPI](https://img.shields.io/pypi/v/fcs-simple-endpoint)](https://pypi.python.org/pypi/fcs-simple-endpoint)
 [![](https://img.shields.io/github/last-commit/Querela/fcs-simple-endpoint-python)](https://github.com/Querela/fcs-simple-endpoint-python/commits/main)
 [![Documentation Status](https://readthedocs.org/projects/fcs-simple-endpoint-python/badge/?version=latest)](https://fcs-simple-endpoint-python.readthedocs.io/en/latest/?badge=latest)
 <!-- END: BADGES -->
